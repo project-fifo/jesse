@@ -1,8 +1,6 @@
 # See LICENSE for licensing information.
 
-REBAR ?= $(shell command -v rebar >/dev/null 2>&1 && echo "rebar" || echo "$(CURDIR)/rebar")
-
-ELVIS ?= $(shell command -v elvis >/dev/null 2>&1 && echo "elvis" || echo "$(CURDIR)/elvis")
+REBAR ?= $(shell command -v rebar3 >/dev/null 2>&1 && echo "rebar3" || echo "$(CURDIR)/rebar3")
 
 DEPS_PLT := $(CURDIR)/.deps_plt
 
@@ -28,7 +26,7 @@ SRCS := $(wildcard src/* include/* rebar.config)
 SRC_BEAMS := $(patsubst src/%.erl, ebin/%.beam, $(wildcard src/*.erl))
 
 .PHONY: all
-all: maybe_dev deps ebin/jesse.app bin/jesse
+all: maybe_dev _build/default/lib/jesse/ebin/jesse.app _build/default/bin/jesse
 
 .PHONY: maybe_dev
 maybe_dev:
@@ -55,40 +53,25 @@ clean:
 .PHONY: distclean
 distclean:
 	$(RM) $(DEPS_PLT)
-	$(RM) -r deps
+	$(RM) -r _build
 	$(MAKE) clean
 
 # Deps
 
-.PHONY: get-deps
-get-deps:
-	$(REBAR) get-deps
-	[ -f .rebar/DEV_MODE ] && git submodule update --init --recursive || true
-
-.PHONY: update-deps
-update-deps:
-	$(REBAR) update-deps
-
-.PHONY: delete-deps
-delete-deps:
-	$(REBAR) delete-deps
-
-.PHONY: deps
-deps: get-deps
 
 # Docs
 
 .PHONY: docs
 docs:
-	$(REBAR) doc skip_deps=true
+	$(REBAR) doc
 
 # Compile
 
-ebin/jesse.app: compile
+_build/default/bin/jesse: compile
 
-bin/jesse: ebin/jesse.app $(SRC_BEAMS)
+_build/default/bin/jesse: _build/default/lib/jesse/ebin/jesse.app
 	$(REBAR) escriptize
-	bin/jesse --help
+	_build/default/bin/jesse --help
 
 .PHONY: compile
 compile: $(SRCS)
@@ -103,28 +86,29 @@ test: .rebar/DEV_MODE deps eunit ct xref dialyzer
 	mkdir -p .rebar
 	touch .rebar/DEV_MODE
 
+.PHONY: submodules
+submodules:
+	git submodule update --init --recursive
+
+.PHONY: test
+test: .rebar/DEV_MODE submodules eunit ct dialyzer
+
 .PHONY: eunit
 eunit:
-	$(REBAR) eunit skip_deps=true
+	$(REBAR) eunit
 
 .PHONY: ct
 ct:
-	$(REBAR) ct skip_deps=true suites="jesse_tests_draft3,jesse_tests_draft4"
+	$(REBAR) ct --suite "test/jesse_tests_draft3_SUITE,test/jesse_tests_draft4_SUITE"
 
 .PHONY: xref
 xref:
-	$(REBAR) xref skip_deps=true
-
-$(DEPS_PLT):
-	$(DIALYZER) --build_plt --apps $(ERLANG_DIALYZER_APPS) -r deps --output_plt $(DEPS_PLT)
+	$(REBAR) xref
 
 .PHONY: dialyzer
-dialyzer: $(DEPS_PLT) ebin/jesse.app
-	$(DIALYZER) -q --plt $(DEPS_PLT) -Wno_return ebin > test/dialyzer_warnings || true
-	diff -U0 test/known_dialyzer_warnings test/dialyzer_warnings
+dialyzer: _build/default/lib/jesse/ebin/jesse.app
+	$(REBAR) dialyzer
 
 .PHONY: elvis
 elvis:
-	$(ELVIS) rock > test/elvis || true
-	grep "FAIL" test/elvis | sed -r "s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g" > test/elvis_warnings
-	diff -U0 test/known_elvis_warnings test/elvis_warnings || cat test/elvis
+	$(REBAR) as lint lint
