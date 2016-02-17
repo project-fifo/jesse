@@ -8,8 +8,7 @@
                                        , jsx
                                        , rfc3339
                                        ]}
-                      , {maintainers, [ "for-GET/jesse"
-                                      ]}
+                      , {maintainers, ["for-GET", "Heinz N. Gies"]}
                       , {licenses, [ "Apache 2.0"
                                    ]}
                       , {links, [ {"Github", "https://github.com/for-GET/jesse"}
