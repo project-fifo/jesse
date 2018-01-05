@@ -29,14 +29,6 @@
                        , all
                        , init_per_suite
                        , end_per_suite
-                       , do_test
-                       , run_tests
-                       , run_test_set
-                       , load_test_specs
-                       , filename_to_key
-                       , get_path
-                       , load_schema
-                       , test_dir
                        ]).
 
 -include_lib("common_test/include/ct.hrl").
@@ -136,16 +128,8 @@ properties(Config) ->
 ref(Config) ->
   do_test("ref", Config).
 
-test_dir() ->
-  case os:getenv("TEST_DIR") of
-    false ->
-      "../../lib/jesse/test";
-    R ->
-      R
-  end.
-
 refRemote(Config) ->
-  TestDir = test_dir(),
+  TestDir = os:getenv("TEST_DIR"),
   DocumentRoot = filename:join(TestDir, "JSON-Schema-Test-Suite/remotes"),
   ServerOpts = [ {port, 1234}
                , {server_name, "localhost"}
@@ -192,70 +176,3 @@ ipv4Format(Config) ->
 
 ipv6Format(Config) ->
   do_test("ipv6Format", Config).
-%%% Internal functions
-
-do_test(Key, Config) ->
-    run_tests(?config(Key, Config)).
-
-run_tests(Specs) ->
-  lists:foreach( fun(Spec) ->
-                     Description = get_path(?DESCRIPTION, Spec),
-                     Schema      = get_path(?SCHEMA, Spec),
-                     TestSet     = get_path(?TESTS, Spec),
-                     ct:pal( "** Test set: ~s~n"
-                             "** Schema: ~p~n"
-                           , [Description, Schema]
-                           ),
-                     run_test_set(Schema, TestSet)
-                 end
-               , Specs
-               ).
-
-run_test_set(Schema, TestSet) ->
-  lists:foreach( fun(Test) ->
-                     Description = get_path(?DESCRIPTION, Test),
-                     TestData    = get_path(?DATA, Test),
-                     ct:pal("* Test case: ~s~n", [Description]),
-                     Opts = [ { default_schema_ver
-                              , <<"http://json-schema.org/draft-04/schema#">>
-                              }
-                            , {schema_loader_fun, fun load_schema/1}
-                            ],
-                     try jesse:validate_with_schema(Schema, TestData, Opts) of
-                         Result ->
-                             ct:pal("Result: ~p~n", [Result]),
-                             case get_path(?VALID, Test) of
-                                 true  -> {ok, TestData} = Result;
-                                 false -> {error, _} = Result
-                             end
-                     catch C:E ->
-                               ct:pal("Error: ~p:~p~nStacktrace: ~p~n",
-                                      [C, E, erlang:get_stacktrace()])
-                     end
-                 end
-               , TestSet
-               ).
-
-load_test_specs() ->
-  TestsDir = filename:join( test_dir()
-                          , "JSON-Schema-Test-Suite/tests/draft4"
-                          ),
-  FileList = filelib:wildcard(TestsDir ++ "/*.json"),
-  lists:map( fun(Filename) ->
-                 {ok, Bin} = file:read_file(Filename),
-                 JsonTest  = jsx:decode(Bin),
-                 {filename_to_key(Filename), JsonTest}
-             end
-           , FileList
-           ).
-
-filename_to_key(Filename) ->
-  filename:rootname(filename:basename(Filename)).
-
-get_path(Key, Schema) ->
-  jesse_json_path:path(Key, Schema).
-
-load_schema(URI) ->
-  {ok, Response} = httpc:request(get, {URI, []}, [], [{body_format, binary}]),
-  {{_Line, 200, _}, _Headers, Body} = Response,
-  jsx:decode(Body).
